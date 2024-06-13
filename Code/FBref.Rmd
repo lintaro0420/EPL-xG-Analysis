@@ -1,0 +1,73 @@
+---
+title: "EPL Project"
+output: html_notebook
+---
+
+```{r}
+library(readr)
+library(dplyr)
+library(ggplot2)
+#install.packages("ggrepel")
+library(ggrepel)
+library(cowplot)
+```
+
+```{r}
+# download the data 
+epl_data <- read_csv("~/Personal Project/FBREF/epl_basicstats_data.csv")
+
+# extract attackers from epl_data 
+epl_attacker <- epl_data[epl_data$position %in% c("FW", "MF,FW"), ]
+epl_attacker
+
+```
+
+```{r}
+epl_attacker <- epl_attacker %>%
+  mutate(goal_diff = g_pkper90 - npxGper90)
+
+
+# Calculate the 95th and 5th percentile thresholds
+goal_threshold_high <- quantile(epl_attacker$goal_diff, 0.90)  # Top 5%
+goal_threshold_low <- quantile(epl_attacker$goal_diff, 0.10)   # Bottom 5%
+
+# Filter players who are in the top 5% or bottom 5%
+significant_players <- epl_attacker %>%
+  filter(goal_diff >= goal_threshold_high | goal_diff <= goal_threshold_low)
+
+# Categorize players based on their performance
+epl_attacker <- epl_attacker %>%
+  mutate(performance_category = case_when(
+    goal_diff >= goal_threshold_high ~ "Top Performer",
+    goal_diff <= goal_threshold_low ~ "Bottom Performer",
+    TRUE ~ "Other"
+  ))
+
+epl_attacker
+```
+
+```{r}
+# Create the plot with npxG as x-axis and g_pk as y-axis
+plot <- ggplot(epl_attacker, aes(x = npxGper90, y = g_pkper90, color = performance_category)) +
+  geom_point() +  
+  geom_smooth(method = "lm", se = FALSE, color = "gray15", linetype = "dashed") +  # Add linear model line
+  geom_text_repel(
+    data = subset(epl_attacker, performance_category %in% c("Top Performer", "Bottom Performer")),
+    aes(label = player), 
+    box.padding = 0.35, 
+    point.padding = 0.5,
+    vjust = 0, 
+    hjust = 0.5,
+    segment.color = 'grey50') +  # Add repelling text labels
+  scale_color_manual(values = c("Top Performer" = "blue", "Bottom Performer" = "red", "Other" = "grey")) +
+  labs(title = "   Non-Penatlty Expected Goals vs Non-Penatlty Goals",
+       x = "Non-Penalty Expected Goals per 90",
+       y = "Non-Penalty Goals per 90")
+  
+# Print the plot
+ggdraw(plot) + theme(plot.background = element_rect(fill="gray15", color = NA)) 
+
+ggsave("EPL xG analysis.png", height = 6, width = 9, dpi = 300)
+
+```
+
